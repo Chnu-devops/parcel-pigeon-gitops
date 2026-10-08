@@ -1,5 +1,5 @@
 # gateway — dev overrides on top of ../../base/values.yaml.
 image:
-  tag: c5027281a2fa0b31f2cf5966af834fa75ce27e1e # bumped by app-repo CI on every push to main
+  tag: f95cc2d7f466de2fd5da3544cdedea43f43ecece # bumped by app-repo CI on every push to main
 config:
   LOG_LEVEL: debug
