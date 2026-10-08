@@ -1,0 +1,4 @@
+# gateway — prod overrides on top of ../../base/values.yaml.
+image:
+  tag: latest # promoted from dev by a reviewed "Promote dev → prod" PR
+replicas: 2

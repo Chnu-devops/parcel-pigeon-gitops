@@ -1,0 +1,60 @@
+name: Promote
+
+# Promotion = copying image tags from the dev overlays to the prod overlays,
+# as a PR. Reviewing and merging the PR is the deploy to prod.
+# Every time app-repo CI bumps a dev tag, the single "Promote dev → prod" PR
+# is opened or updated; "Run workflow" re-creates it on demand.
+on:
+  push:
+    branches: [main]
+    paths: ["apps/*/overlays/dev/values.yaml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write       # push the promote/prod branch
+  pull-requests: write  # open / update the PR
+
+concurrency:
+  group: promote-prod
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy image tags dev → prod
+        id: copy
+        run: |
+          changes=()
+          for dev_values in apps/*/overlays/dev/values.yaml; do
+            app=$(echo "$dev_values" | cut -d/ -f2)
+            prod_values="apps/${app}/overlays/prod/values.yaml"
+            [ -f "$prod_values" ] || continue # not deployed to prod (yet)
+            tag=$(yq '.image.tag // ""' "$dev_values")
+            [ -n "$tag" ] || continue
+            [ "$(yq '.image.tag // ""' "$prod_values")" = "$tag" ] && continue
+            TAG="$tag" yq -i '.image.tag = strenv(TAG)' "$prod_values"
+            changes+=("- \`${app}\` → \`${tag::7}\`")
+          done
+          {
+            echo "summary<<EOF"
+            printf '%s\n' "${changes[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # One rolling PR: each dev bump updates it; if prod already matches dev,
+      # there's nothing to promote and no PR is opened.
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: promote/prod
+          delete-branch: true
+          title: "Promote dev → prod"
+          commit-message: "promote(prod): image tags from dev"
+          body: |
+            Image tags running in **dev**, not yet in **prod**:
+
+            ${{ steps.copy.outputs.summary }}
+
+            Merging this PR deploys them to `parcelpigeon-prod` (Argo CD syncs `main`).
+          labels: promotion, prod

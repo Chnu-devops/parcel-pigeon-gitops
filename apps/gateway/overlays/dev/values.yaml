@@ -1,0 +1,5 @@
+# gateway — dev overrides on top of ../../base/values.yaml.
+image:
+  tag: latest # bumped by app-repo CI on every push to main
+config:
+  LOG_LEVEL: debug

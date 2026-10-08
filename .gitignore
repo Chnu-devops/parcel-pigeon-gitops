@@ -1,0 +1,5 @@
+.DS_Store
+
+# helm dependency build output (Argo CD rebuilds it from Chart.lock)
+apps/*/base/charts/
+services/*/base/charts/

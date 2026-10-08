@@ -1,0 +1,3 @@
+# rabbitmq — dev overrides on top of ../../base/values.yaml.
+# None: base defaults are fine here. The folder must exist — it's what
+# makes the dev ApplicationSet deploy rabbitmq to dev.

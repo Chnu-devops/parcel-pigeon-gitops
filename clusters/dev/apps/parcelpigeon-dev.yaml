@@ -1,0 +1,49 @@
+# ParcelPigeon in dev: one Application per component with an overlays/dev folder,
+# from both apps/ (our services, built by CI) and services/ (datastores).
+# Chart = <folder>/<component>/base, values = base values.yaml + the dev overlay.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: parcelpigeon-dev
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/Chnu-devops/parcel-pigeon-gitops.git
+        revision: main
+        directories:
+          - path: apps/*/overlays/dev
+          - path: services/*/overlays/dev
+  template:
+    metadata:
+      # <folder>/<component>/overlays/dev → segment 0 = apps|services, 1 = component
+      name: "{{ index .path.segments 1 }}-dev"
+      labels:
+        env: dev
+        tier: "{{ index .path.segments 0 }}"
+      finalizers:
+        # Deleting an Application also deletes what it deployed
+        # (PVCs survive thanks to their `Delete=false` sync option).
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Chnu-devops/parcel-pigeon-gitops.git
+        targetRevision: main
+        path: "{{ index .path.segments 0 }}/{{ index .path.segments 1 }}/base"
+        helm:
+          releaseName: "{{ index .path.segments 1 }}"
+          valueFiles:
+            - values.yaml                  # base defaults
+            - ../overlays/dev/values.yaml  # dev overrides, later file wins
+      destination:
+        server: https://kubernetes.default.svc # same minikube for every env
+        namespace: parcelpigeon-dev
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,6 @@
+# shipments-service — dev overrides on top of ../../base/values.yaml.
+# Stays at 1 replica: it runs Alembic migrations on start-up.
+image:
+  tag: latest # bumped by app-repo CI on every push to main
+config:
+  SHIPMENTS_LOG_LEVEL: DEBUG

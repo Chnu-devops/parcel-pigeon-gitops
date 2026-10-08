@@ -1,0 +1,22 @@
+# Bootstrap for the "dev" cluster — the only file applied by hand:
+#   kubectl apply -f clusters/dev/root.yaml
+# Syncs clusters/dev/apps/: ParcelPigeon dev.
+# No finalizer on purpose: deleting this root must never wipe the environments.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Chnu-devops/parcel-pigeon-gitops.git
+    targetRevision: main
+    path: clusters/dev/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
