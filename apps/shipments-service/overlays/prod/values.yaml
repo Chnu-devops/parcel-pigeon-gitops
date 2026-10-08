@@ -1,4 +1,4 @@
 # shipments-service — prod overrides on top of ../../base/values.yaml.
 # Stays at 1 replica: it runs Alembic migrations on start-up.
 image:
-  tag: latest # promoted from dev by a reviewed "Promote dev → prod" PR
+  tag: c5027281a2fa0b31f2cf5966af834fa75ce27e1e # promoted from dev by a reviewed "Promote dev → prod" PR
