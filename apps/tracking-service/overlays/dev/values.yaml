@@ -1,3 +1,3 @@
 # tracking-service — dev overrides on top of ../../base/values.yaml.
 image:
-  tag: latest # bumped by app-repo CI on every push to main
+  tag: c5027281a2fa0b31f2cf5966af834fa75ce27e1e # bumped by app-repo CI on every push to main
