@@ -1,5 +1,7 @@
-apiVersion: apps/v1
-kind: Deployment
+# A Rollout is a Deployment with a release strategy: same selector and pod
+# template, plus `strategy.blueGreen`. Argo Rollouts (clusters/platform/) runs it.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: web
   labels:
@@ -33,3 +35,12 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+  strategy:
+    blueGreen:
+      # The new version starts next to the old one at full size and gets only
+      # `web-preview`. Promotion re-points `web` (and so the Ingress) at it in
+      # one step; the old pods stay for scaleDownDelaySeconds for a quick abort.
+      activeService: web
+      previewService: web-preview
+      autoPromotionEnabled: {{ .Values.rollout.autoPromotionEnabled }}
+      scaleDownDelaySeconds: 30

@@ -17,3 +17,8 @@ ingress:
   enabled: true
   className: nginx
   host: parcelpigeon.local
+
+# Blue-green (Argo Rollouts). Default = dev: switch to the new version as soon
+# as its pods are ready. Prod turns this off and waits for `promote`.
+rollout:
+  autoPromotionEnabled: true

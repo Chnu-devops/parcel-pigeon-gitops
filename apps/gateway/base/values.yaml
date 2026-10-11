@@ -20,3 +20,14 @@ resources:
   limits:
     cpu: 250m
     memory: 128Mi
+
+# Canary steps (Argo Rollouts). Default = dev: half the pods on the new version,
+# check them with the gateway-readyz analysis, then go to 100% on success —
+# no human in the loop. Prod replaces the whole list in its overlay
+# (Helm replaces lists, it doesn't merge them).
+rollout:
+  steps:
+    - setWeight: 50
+    - analysis:
+        templates:
+          - templateName: gateway-readyz

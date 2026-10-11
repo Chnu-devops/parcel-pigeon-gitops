@@ -21,6 +21,9 @@ services/                        # datastores & infra — upstream images, no CI
 lib/
 └── parcelpigeon-common/         # library chart: shared label helpers
 clusters/
+├── platform/                    # cluster-wide controllers, applied once before the envs
+│   ├── root.yaml
+│   └── apps/argo-rollouts.yaml  # Argo Rollouts (Helm chart)
 ├── dev/
 │   ├── root.yaml                # bootstrap, applied by hand once
 │   └── apps/parcelpigeon-dev.yaml   # ApplicationSet for dev
@@ -28,6 +31,7 @@ clusters/
     ├── root.yaml
     └── apps/parcelpigeon-prod.yaml
 .github/workflows/promote.yml    # opens the dev → prod promotion PR
+samples/rollouts/                # Argo Rollouts examples, applied by hand — not synced
 ```
 
 - **A component runs in an environment iff it has `overlays/<env>/`**, in
@@ -40,6 +44,10 @@ clusters/
   `parcelpigeon-prod`. Here "dev" and "prod" clusters are the same minikube;
   on real infrastructure only the `destination.server` in `clusters/prod/`
   would change.
+- **gateway** and **web** are Argo Rollouts `Rollout`s, not `Deployment`s.
+  gateway is a canary, checked by its `/readyz` analysis. web is blue-green.
+  Dev releases on its own. Prod pauses until someone runs
+  `kubectl argo rollouts promote`.
 
 ## How a change reaches prod
 
@@ -63,6 +71,7 @@ minikube addons enable ingress
 kubectl create namespace argocd
 kubectl apply -n argocd --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -f clusters/platform/root.yaml   # Argo Rollouts first: its CRDs are needed by gateway/web
 kubectl apply -f clusters/dev/root.yaml -f clusters/prod/root.yaml
 kubectl -n argocd get applications -L env,tier
 ```
@@ -75,6 +84,13 @@ argocd app list -l tier=services
 argocd app history gateway-prod
 git log --oneline -- apps/gateway/overlays/prod/   # deploy log of one service in prod
 git revert <commit> && git push                    # roll it back (via PR in prod)
+
+# releases (brew install argoproj/tap/kubectl-argo-rollouts)
+kubectl argo rollouts get rollout gateway -n parcelpigeon-prod --watch
+kubectl argo rollouts promote gateway -n parcelpigeon-prod   # past the manual pause
+kubectl argo rollouts promote web -n parcelpigeon-prod       # switch blue → green
+kubectl argo rollouts abort gateway -n parcelpigeon-prod     # stop; then git revert the tag
+kubectl argo rollouts dashboard                              # http://localhost:3100
 ```
 
-Full walkthrough: `docs/environments-migration.md` in the app repo.
+Full walkthroughs in the app repo: `docs/environments-migration.md`, `docs/rollouts-migration.md`.

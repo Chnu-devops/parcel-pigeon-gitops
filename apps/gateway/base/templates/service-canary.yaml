@@ -1,0 +1,14 @@
+# Only the canary pods: Argo Rollouts adds the new ReplicaSet's
+# rollouts-pod-template-hash to this selector while a release is in progress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-canary
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "gateway" "ctx" $) | nindent 4 }}
+spec:
+  selector:
+    {{- include "parcelpigeon.selectorLabels" "gateway" | nindent 4 }}
+  ports:
+    - port: {{ .Values.port }}
+      targetPort: {{ .Values.port }}

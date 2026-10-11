@@ -1,0 +1,80 @@
+# Canary with a traffic router (ingress-nginx, `minikube addons enable ingress`):
+# the weight is set on a canary copy of the Ingress, independent of pod count —
+# 5% with only 1 canary pod. Rollouts creates `demo-nginx-demo-nginx-canary`.
+#   echo "$(minikube ip) demo-nginx.local" | sudo tee -a /etc/hosts
+#   while true; do curl -s demo-nginx.local/color; echo; sleep 0.2; done
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-nginx-stable # Rollouts points this at the old pods…
+spec:
+  selector:
+    app: demo-nginx
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-nginx-canary # …and this at the new ones
+spec:
+  selector:
+    app: demo-nginx
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-nginx
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: demo-nginx.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-nginx-stable
+                port:
+                  number: 80
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-nginx
+  template:
+    metadata:
+      labels:
+        app: demo-nginx
+    spec:
+      containers:
+        - name: demo
+          image: argoproj/rollouts-demo:blue
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 5m, memory: 32Mi }
+  strategy:
+    canary:
+      stableService: demo-nginx-stable
+      canaryService: demo-nginx-canary
+      trafficRouting:
+        nginx:
+          stableIngress: demo-nginx # the Ingress users hit; never edited by hand
+      steps:
+        - setWeight: 5
+        - pause: { duration: 1m }
+        - setWeight: 25
+        - pause: { duration: 1m }
+        - setWeight: 50
+        - pause: {}

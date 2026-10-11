@@ -2,3 +2,13 @@
 image:
   tag: f95cc2d7f466de2fd5da3544cdedea43f43ecece # promoted from dev by a reviewed "Promote dev → prod" PR
 replicas: 2
+# Prod canary: one of two pods on the new version, then wait for a person
+# (kubectl argo rollouts promote gateway -n parcelpigeon-prod), then the
+# readyz analysis, then 100%. Replaces base's list as a whole.
+rollout:
+  steps:
+    - setWeight: 50
+    - pause: {}
+    - analysis:
+        templates:
+          - templateName: gateway-readyz

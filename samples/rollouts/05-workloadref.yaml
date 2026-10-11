@@ -1,0 +1,45 @@
+# Adopting an existing Deployment without rewriting it: the Rollout borrows the
+# pod template via workloadRef, and with scaleDown: progressively the
+# Deployment is scaled to 0 as the Rollout's pods become ready.
+# Afterwards, change the image *in the Deployment*; the Rollout releases it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: legacy
+  template:
+    metadata:
+      labels:
+        app: legacy
+    spec:
+      containers:
+        - name: demo
+          image: argoproj/rollouts-demo:blue
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 5m, memory: 32Mi }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: legacy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: legacy
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: legacy
+    scaleDown: progressively # or: never / onsuccess
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - pause: {}

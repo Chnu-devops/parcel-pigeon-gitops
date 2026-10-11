@@ -1,0 +1,30 @@
+# Argo Rollouts controller (+ CRDs: Rollout, AnalysisTemplate, AnalysisRun, …)
+# from the upstream Helm chart. One controller per cluster serves every namespace,
+# so parcelpigeon-dev and parcelpigeon-prod both use this one.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-rollouts
+    targetRevision: 2.43.6 # app v1.10.0 — bump by PR, like any other version
+    helm:
+      valuesObject:
+        dashboard:
+          enabled: true # kubectl -n argo-rollouts port-forward svc/argo-rollouts-dashboard 3100:3100
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # the Rollout CRD is too big for client-side apply's annotation
