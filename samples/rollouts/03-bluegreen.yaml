@@ -1,0 +1,67 @@
+# Blue-green with analysis on both sides of the switch:
+#   prePromotionAnalysis  — checks the preview before users see it; failure = no switch
+#   postPromotionAnalysis — checks after the switch; failure = switch back
+# Uses the `http-ok` template from 04-analysis-templates.yaml (apply that first).
+#   kubectl -n rollouts-lab port-forward svc/demo-bg-preview 8081:80
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-bg-active
+spec:
+  selector:
+    app: demo-bg
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-bg-preview
+spec:
+  selector:
+    app: demo-bg
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-bg
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-bg
+  template:
+    metadata:
+      labels:
+        app: demo-bg
+    spec:
+      containers:
+        - name: demo
+          image: argoproj/rollouts-demo:blue
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 5m, memory: 32Mi }
+  strategy:
+    blueGreen:
+      activeService: demo-bg-active
+      previewService: demo-bg-preview
+      autoPromotionEnabled: false # wait for `promote` after the pre-promotion analysis
+      previewReplicaCount: 1      # save resources until the switch
+      scaleDownDelaySeconds: 60   # old version kept this long for a fast abort
+      prePromotionAnalysis:
+        templates:
+          - templateName: http-ok
+        args:
+          - name: url
+            value: http://demo-bg-preview.rollouts-lab.svc/color
+      postPromotionAnalysis:
+        templates:
+          - templateName: http-ok
+        args:
+          - name: url
+            value: http://demo-bg-active.rollouts-lab.svc/color

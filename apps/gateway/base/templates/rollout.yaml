@@ -1,11 +1,17 @@
-apiVersion: apps/v1
-kind: Deployment
+# A Rollout is a Deployment with a release strategy: same selector and pod
+# template, plus `strategy.canary`. Argo Rollouts (clusters/platform/) runs it.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: gateway
   labels:
     {{- include "parcelpigeon.labels" (dict "name" "gateway" "ctx" $) | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
+  # A canary whose pods never pass readiness (/readyz) is aborted after 2 min
+  # instead of hanging: stable keeps serving, Argo CD shows Degraded.
+  progressDeadlineSeconds: 120
+  progressDeadlineAbort: true
   selector:
     matchLabels:
       {{- include "parcelpigeon.selectorLabels" "gateway" | nindent 6 }}
@@ -42,3 +48,12 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+  strategy:
+    canary:
+      # The `gateway` Service keeps selecting every gateway pod, so web's nginx
+      # sends real traffic to both versions in proportion to their pod counts
+      # (no traffic router). `gateway-canary` selects only the new version's
+      # pods — the gateway-readyz analysis step checks the canary through it.
+      canaryService: gateway-canary
+      steps:
+        {{- toYaml .Values.rollout.steps | nindent 8 }}

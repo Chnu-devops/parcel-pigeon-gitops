@@ -1,0 +1,15 @@
+# The version waiting to be promoted. Argo Rollouts points this selector at the
+# new ReplicaSet; check it with
+#   kubectl -n <ns> port-forward svc/web-preview 8081:{{ .Values.port }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-preview
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "web" "ctx" $) | nindent 4 }}
+spec:
+  selector:
+    {{- include "parcelpigeon.selectorLabels" "web" | nindent 4 }}
+  ports:
+    - port: {{ .Values.port }}
+      targetPort: {{ .Values.port }}

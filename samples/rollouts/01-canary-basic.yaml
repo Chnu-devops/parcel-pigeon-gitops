@@ -1,0 +1,48 @@
+# Canary, no traffic router: the share of traffic = share of pods.
+# 5 replicas → setWeight: 20 is exactly one canary pod.
+#   kubectl argo rollouts set image demo demo=argoproj/rollouts-demo:yellow -n rollouts-lab
+#   → stops at the first pause until `kubectl argo rollouts promote demo -n rollouts-lab`
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+spec:
+  selector:
+    app: demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo
+spec:
+  replicas: 5
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      containers:
+        - name: demo
+          image: argoproj/rollouts-demo:blue
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 5m, memory: 32Mi }
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {}               # wait for `promote` — forever if nobody does it
+        - setWeight: 40
+        - pause: { duration: 30s } # continues on its own
+        - setWeight: 60
+        - pause: { duration: 30s }
+        - setWeight: 80
+        - pause: { duration: 30s }

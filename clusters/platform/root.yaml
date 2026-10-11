@@ -1,0 +1,24 @@
+# Bootstrap for cluster-wide add-ons — applied by hand once, before the env roots:
+#   kubectl apply -f clusters/platform/root.yaml
+# Syncs clusters/platform/apps/: controllers every environment on this cluster
+# relies on (today: Argo Rollouts). dev and prod share one minikube, so there is
+# one platform root; on real infrastructure every cluster would get its own.
+# No finalizer on purpose: deleting this root must never wipe the controllers.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-platform
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Chnu-devops/parcel-pigeon-gitops.git
+    targetRevision: main
+    path: clusters/platform/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

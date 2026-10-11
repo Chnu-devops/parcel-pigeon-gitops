@@ -1,0 +1,134 @@
+# Three ways to answer "is the new version OK?", plus a canary that runs one of
+# them in the background for the whole release.
+#
+# 1) web — call an HTTP endpoint (what apps/gateway uses on /readyz).
+#    rollouts-demo returns 200 for good colours; `bad-*` images return 500s.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: http-ok
+spec:
+  args:
+    - name: url
+  metrics:
+    - name: http-ok
+      interval: 10s
+      count: 5
+      consecutiveErrorLimit: 1 # a 5xx is an *error*; two in a row → Failed
+      provider:
+        web:
+          url: "{{args.url}}"
+          timeoutSeconds: 5
+---
+# 2) job — any check that fits in a container; exit code 0 = success.
+#    No monitoring stack needed (the slides' fallback for the practice).
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: smoke-job
+spec:
+  args:
+    - name: url
+  metrics:
+    - name: smoke
+      count: 1
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.10.1
+                    args: ["--fail", "--silent", "--show-error", "--retry", "3", "{{args.url}}"]
+---
+# 3) prometheus — share of non-5xx requests, from the gateway's own
+#    http_requests_total{method,route,status} (services/gateway/src/plugins/metrics.ts).
+#    Needs Prometheus scraping the pods and keeping their
+#    rollouts-pod-template-hash label (as rollouts_pod_template_hash) — not
+#    usable until the metrics platform lands; kept here as the target. In a
+#    Rollout, pass the canary's hash with:
+#      args:
+#        - name: canary-hash
+#          valueFrom:
+#            podTemplateHashValue: Latest
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+spec:
+  args:
+    - name: namespace
+    - name: canary-hash
+  metrics:
+    - name: success-rate
+      interval: 1m
+      count: 5
+      failureLimit: 1
+      successCondition: result[0] >= 0.95
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring:9090
+          query: |
+            sum(rate(http_requests_total{namespace="{{args.namespace}}",rollouts_pod_template_hash="{{args.canary-hash}}",status!~"5.."}[2m]))
+            /
+            sum(rate(http_requests_total{namespace="{{args.namespace}}",rollouts_pod_template_hash="{{args.canary-hash}}"}[2m]))
+---
+# Background analysis: runs alongside the steps from step 1 until the end.
+# A failure at any moment aborts. Try it with a broken image:
+#   kubectl argo rollouts set image demo-bga demo=argoproj/rollouts-demo:bad-red -n rollouts-lab
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-bga-canary
+spec:
+  selector:
+    app: demo-bga
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-bga
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: demo-bga
+  template:
+    metadata:
+      labels:
+        app: demo-bga
+    spec:
+      containers:
+        - name: demo
+          image: argoproj/rollouts-demo:blue
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 5m, memory: 32Mi }
+  strategy:
+    canary:
+      canaryService: demo-bga-canary
+      analysis:
+        templates:
+          - templateName: http-ok
+        startingStep: 1 # after the first setWeight, so canary pods exist
+        args:
+          - name: url
+            value: http://demo-bga-canary.rollouts-lab.svc/color
+      steps:
+        - setWeight: 25
+        - pause: { duration: 1m }
+        - setWeight: 50
+        - pause: { duration: 1m }
+        - analysis: # an inline step too: one Job smoke test before 100%
+            templates:
+              - templateName: smoke-job
+            args:
+              - name: url
+                value: http://demo-bga-canary.rollouts-lab.svc/color

@@ -2,5 +2,9 @@
 image:
   tag: c5027281a2fa0b31f2cf5966af834fa75ce27e1e # promoted from dev by a reviewed "Promote dev → prod" PR
 replicas: 2
+# Blue-green: the new version waits on web-preview until
+# kubectl argo rollouts promote web -n parcelpigeon-prod
+rollout:
+  autoPromotionEnabled: false
 ingress:
   host: parcelpigeon.local

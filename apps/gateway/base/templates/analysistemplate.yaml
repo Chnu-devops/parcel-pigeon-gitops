@@ -1,0 +1,26 @@
+# Is the canary healthy? Asks the new pods' /readyz (it checks that the gateway
+# reaches shipments-service and tracking-service) every 10s, six times.
+# No Prometheus needed; samples/rollouts/04-analysis-templates.yaml has the
+# Prometheus success-rate version for when monitoring lands.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: gateway-readyz
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "gateway" "ctx" $) | nindent 4 }}
+spec:
+  metrics:
+    - name: readyz
+      interval: 10s
+      count: 6
+      # /readyz answers 200 {"ready": true, ...} or 503. Argo Rollouts counts a
+      # non-2xx answer as a measurement *error*, not a *failure*, so the error
+      # limit is what aborts a bad release: two 503s in a row (~20s).
+      failureLimit: 0
+      consecutiveErrorLimit: 1
+      successCondition: result == true
+      provider:
+        web:
+          url: http://gateway-canary.{{ .Release.Namespace }}.svc:{{ .Values.port }}/readyz
+          jsonPath: "{$.ready}"
+          timeoutSeconds: 5
