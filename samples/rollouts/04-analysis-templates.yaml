@@ -47,9 +47,10 @@ spec:
 # 3) prometheus — share of non-5xx requests, from the gateway's own
 #    http_requests_total{method,route,status} (services/gateway/src/plugins/metrics.ts).
 #    Needs Prometheus scraping the pods and keeping their
-#    rollouts-pod-template-hash label (as rollouts_pod_template_hash) — not
-#    usable until the metrics platform lands; kept here as the target. In a
-#    Rollout, pass the canary's hash with:
+#    rollouts-pod-template-hash label (as rollouts_pod_template_hash). The
+#    gateway chart now runs a version of this for real (gateway-success-rate in
+#    apps/gateway/base/templates/analysistemplate.yaml, Prometheus from
+#    clusters/platform/). In a Rollout, pass the canary's hash with:
 #      args:
 #        - name: canary-hash
 #          valueFrom:

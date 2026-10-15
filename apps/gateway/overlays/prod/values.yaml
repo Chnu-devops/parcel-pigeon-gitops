@@ -4,7 +4,7 @@ image:
 replicas: 2
 # Prod canary: one of two pods on the new version, then wait for a person
 # (kubectl argo rollouts promote gateway -n parcelpigeon-prod), then the
-# readyz analysis, then 100%. Replaces base's list as a whole.
+# readyz and success-rate analyses, then 100%. Replaces base's list as a whole.
 rollout:
   steps:
     - setWeight: 50
@@ -12,3 +12,10 @@ rollout:
     - analysis:
         templates:
           - templateName: gateway-readyz
+    - analysis:
+        templates:
+          - templateName: gateway-success-rate
+        args:
+          - name: canary-hash # the new ReplicaSet's rollouts-pod-template-hash
+            valueFrom:
+              podTemplateHashValue: Latest

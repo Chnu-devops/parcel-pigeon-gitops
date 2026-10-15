@@ -11,6 +11,11 @@ config:
   SHIPMENTS_URL: "http://shipments-service:8000"
   TRACKING_URL: "http://tracking-service:8002"
   LOG_LEVEL: "info"
+  # Fault switch for the observability demo: share of /api requests (0..1)
+  # the gateway answers with 500. Set it in an overlay, e.g. "0.3": the
+  # ConfigMap checksum changes → new canary → gateway-success-rate fails →
+  # Argo Rollouts aborts, and GatewayHighErrorRate fires.
+  ERROR_RATE: "0"
 secret:
   GATEWAY_API_KEY: ""
 resources:
@@ -22,8 +27,10 @@ resources:
     memory: 128Mi
 
 # Canary steps (Argo Rollouts). Default = dev: half the pods on the new version,
-# check them with the gateway-readyz analysis, then go to 100% on success —
-# no human in the loop. Prod replaces the whole list in its overlay
+# check they're ready (gateway-readyz), then check their real traffic in
+# Prometheus (gateway-success-rate), then go to 100% on success — no human in
+# the loop. The success-rate check needs traffic: run `./scripts/dev.sh load`
+# (app repo) during a release. Prod replaces the whole list in its overlay
 # (Helm replaces lists, it doesn't merge them).
 rollout:
   steps:
@@ -31,3 +38,16 @@ rollout:
     - analysis:
         templates:
           - templateName: gateway-readyz
+    - analysis:
+        templates:
+          - templateName: gateway-success-rate
+        args:
+          - name: canary-hash # the new ReplicaSet's rollouts-pod-template-hash
+            valueFrom:
+              podTemplateHashValue: Latest
+
+# ServiceMonitor + PrometheusRule + the gateway-success-rate analysis (needs
+# the kube-prometheus-stack CRDs and Prometheus from clusters/platform/).
+monitoring:
+  enabled: true
+  prometheusAddress: http://kps-kube-prometheus-stack-prometheus.monitoring:9090

@@ -1,0 +1,19 @@
+{{- if .Values.monitoring.enabled }}
+# Tells Prometheus (kube-prometheus-stack, clusters/platform/) to scrape
+# /metrics on every pod behind the shipments-service Service. Shows up in
+# Prometheus → Status → Targets as serviceMonitor/<namespace>/shipments-service/0.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: shipments-service
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "shipments-service" "ctx" $) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "parcelpigeon.selectorLabels" "shipments-service" | nindent 6 }}
+  endpoints:
+    - port: http # the named port in service.yaml
+      path: /metrics
+      interval: 15s
+{{- end }}

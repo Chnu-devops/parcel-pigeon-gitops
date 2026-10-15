@@ -1,0 +1,24 @@
+{{- if .Values.monitoring.enabled }}
+# Tells Prometheus (kube-prometheus-stack, clusters/platform/) to scrape
+# /metrics on every pod behind the gateway Service. Shows up in
+# Prometheus → Status → Targets as serviceMonitor/<namespace>/gateway/0.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gateway
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "gateway" "ctx" $) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "parcelpigeon.selectorLabels" "gateway" | nindent 6 }}
+  # Copy the Argo Rollouts ReplicaSet hash onto every series (as
+  # rollouts_pod_template_hash) so the gateway-success-rate analysis can
+  # tell canary pods from stable ones.
+  podTargetLabels:
+    - rollouts-pod-template-hash
+  endpoints:
+    - port: http # the named port in service.yaml
+      path: /metrics
+      interval: 15s
+{{- end }}

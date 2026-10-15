@@ -8,5 +8,6 @@ spec:
   selector:
     {{- include "parcelpigeon.selectorLabels" "tracking-service" | nindent 4 }}
   ports:
-    - port: {{ .Values.port }}
+    - name: http # ServiceMonitor picks the endpoint by port name
+      port: {{ .Values.port }}
       targetPort: {{ .Values.port }}

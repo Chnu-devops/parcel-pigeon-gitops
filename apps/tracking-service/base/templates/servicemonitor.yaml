@@ -1,0 +1,19 @@
+{{- if .Values.monitoring.enabled }}
+# Tells Prometheus (kube-prometheus-stack, clusters/platform/) to scrape
+# /metrics on every pod behind the tracking-service Service. Shows up in
+# Prometheus → Status → Targets as serviceMonitor/<namespace>/tracking-service/0.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tracking-service
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "tracking-service" "ctx" $) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "parcelpigeon.selectorLabels" "tracking-service" | nindent 6 }}
+  endpoints:
+    - port: http # the named port in service.yaml
+      path: /metrics
+      interval: 15s
+{{- end }}

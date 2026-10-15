@@ -23,3 +23,8 @@ resources:
   limits:
     cpu: 250m
     memory: 128Mi
+
+# ServiceMonitor + PrometheusRule (needs the kube-prometheus-stack CRDs from
+# clusters/platform/). Turn off on a cluster without the monitoring stack.
+monitoring:
+  enabled: true

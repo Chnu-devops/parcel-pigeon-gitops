@@ -1,0 +1,60 @@
+# Metrics + alerting: Prometheus Operator, Prometheus, Alertmanager, Grafana,
+# node-exporter, kube-state-metrics, plus ready-made cluster dashboards and
+# alert rules. Release name `kps`, so the Services are the ones on the slides:
+#   kubectl -n monitoring port-forward svc/kps-grafana 3000:80
+#   kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090
+#   kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-alertmanager 9093
+#   kubectl -n monitoring get secret kps-grafana -o jsonpath="{.data.admin-password}" | base64 -d; echo
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.7.0 # operator v0.94.1 — bump by PR, like any other version
+    helm:
+      releaseName: kps
+      valuesObject:
+        # minikube runs these control-plane parts on localhost only: Prometheus
+        # can't reach them and their "…Down" alerts would fire forever. A
+        # noisy alert nobody acts on is worse than no alert.
+        kubeEtcd: { enabled: false }
+        kubeControllerManager: { enabled: false }
+        kubeScheduler: { enabled: false }
+        kubeProxy: { enabled: false }
+        prometheus:
+          prometheusSpec:
+            # By default Prometheus only picks up ServiceMonitors / PrometheusRules
+            # labelled `release: kps`. Ours live in the app charts, so take all.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            retention: 2d
+            resources:
+              requests: { cpu: 100m, memory: 400Mi }
+        grafana:
+          # The dashboard sidecar already watches ConfigMaps labelled
+          # grafana_dashboard: "1" in every namespace (chart default).
+          additionalDataSources:
+            - name: Loki
+              uid: loki
+              type: loki
+              url: http://loki-gateway.monitoring # clusters/platform/apps/loki.yaml
+        # Alertmanager keeps the chart's "null" receiver: alerts are visible in
+        # its UI (:9093). Add a Telegram/Slack receiver under alertmanager.config.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # the operator's CRDs are too big for client-side apply

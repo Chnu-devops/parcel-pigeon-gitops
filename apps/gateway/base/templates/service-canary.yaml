@@ -9,6 +9,8 @@ metadata:
 spec:
   selector:
     {{- include "parcelpigeon.selectorLabels" "gateway" | nindent 4 }}
+  # No port name on purpose: the gateway ServiceMonitor scrapes port `http`,
+  # so these same pods are not scraped a second time through this Service.
   ports:
     - port: {{ .Values.port }}
       targetPort: {{ .Values.port }}

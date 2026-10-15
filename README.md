@@ -23,7 +23,13 @@ lib/
 clusters/
 ├── platform/                    # cluster-wide controllers, applied once before the envs
 │   ├── root.yaml
-│   └── apps/argo-rollouts.yaml  # Argo Rollouts (Helm chart)
+│   ├── apps/
+│   │   ├── argo-rollouts.yaml          # Argo Rollouts (Helm chart)
+│   │   ├── kube-prometheus-stack.yaml  # Prometheus, Alertmanager, Grafana (release `kps`)
+│   │   ├── loki.yaml                   # log storage
+│   │   ├── alloy.yaml                  # log collector → Loki
+│   │   └── parcelpigeon-observability.yaml
+│   └── observability/           # shared Grafana dashboard "ParcelPigeon RED"
 ├── dev/
 │   ├── root.yaml                # bootstrap, applied by hand once
 │   └── apps/parcelpigeon-dev.yaml   # ApplicationSet for dev
@@ -48,6 +54,13 @@ samples/rollouts/                # Argo Rollouts examples, applied by hand — n
   gateway is a canary, checked by its `/readyz` analysis. web is blue-green.
   Dev releases on its own. Prod pauses until someone runs
   `kubectl argo rollouts promote`.
+- **Monitoring** lives next to the code it watches: gateway, shipments-service
+  and tracking-service each ship a `ServiceMonitor` (scrape `/metrics` on the
+  Service's `http` port) and a `PrometheusRule` (`<Svc>HighErrorRate`,
+  `<Svc>Down`), behind `monitoring.enabled`. The gateway canary is checked
+  twice: `/readyz`, then the canary's 5xx share in Prometheus
+  (`gateway-success-rate`). Set `config.ERROR_RATE: "0.3"` in a gateway
+  overlay to make a bad release on purpose.
 
 ## How a change reaches prod
 
@@ -66,12 +79,12 @@ versions in `services/`, new components) is a normal PR.
 ## Bootstrap
 
 ```bash
-minikube start --memory 6g --cpus 4
+minikube start --memory 8g --cpus 4   # the monitoring stack needs the extra 2g
 minikube addons enable ingress
 kubectl create namespace argocd
 kubectl apply -n argocd --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-kubectl apply -f clusters/platform/root.yaml   # Argo Rollouts first: its CRDs are needed by gateway/web
+kubectl apply -f clusters/platform/root.yaml   # first: Rollout and ServiceMonitor CRDs are needed by the apps
 kubectl apply -f clusters/dev/root.yaml -f clusters/prod/root.yaml
 kubectl -n argocd get applications -L env,tier
 ```
@@ -91,6 +104,14 @@ kubectl argo rollouts promote gateway -n parcelpigeon-prod   # past the manual p
 kubectl argo rollouts promote web -n parcelpigeon-prod       # switch blue → green
 kubectl argo rollouts abort gateway -n parcelpigeon-prod     # stop; then git revert the tag
 kubectl argo rollouts dashboard                              # http://localhost:3100
+
+# observability
+kubectl -n monitoring port-forward svc/kps-grafana 3000:80                              # http://localhost:3000, user admin
+kubectl -n monitoring get secret kps-grafana -o jsonpath="{.data.admin-password}" | base64 -d; echo
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090        # Status → Targets
+kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-alertmanager 9093      # firing alerts
+kubectl -n parcelpigeon-dev get analysisrun                                              # canary checks and their results
 ```
 
-Full walkthroughs in the app repo: `docs/environments-migration.md`, `docs/rollouts-migration.md`.
+Full walkthroughs in the app repo: `docs/environments-migration.md`, `docs/rollouts-migration.md`,
+`docs/observability-migration.md`.

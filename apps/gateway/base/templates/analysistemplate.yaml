@@ -1,7 +1,7 @@
 # Is the canary healthy? Asks the new pods' /readyz (it checks that the gateway
 # reaches shipments-service and tracking-service) every 10s, six times.
-# No Prometheus needed; samples/rollouts/04-analysis-templates.yaml has the
-# Prometheus success-rate version for when monitoring lands.
+# No Prometheus needed. The gateway-success-rate template below is the
+# Prometheus check that runs after it.
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
@@ -24,3 +24,39 @@ spec:
           url: http://gateway-canary.{{ .Release.Namespace }}.svc:{{ .Values.port }}/readyz
           jsonPath: "{$.ready}"
           timeoutSeconds: 5
+{{- if .Values.monitoring.enabled }}
+---
+# Is the canary serving users well? Share of the canary pods' /api requests
+# that did not answer 5xx, from the gateway's own http_requests_total
+# (services/gateway/src/plugins/metrics.ts), as scraped by the gateway
+# ServiceMonitor (which keeps rollouts_pod_template_hash on every series).
+# Every 30s, four times; one bad measurement fails the release.
+#
+# `or vector(1)`: no /api traffic on the canary = nothing to judge = pass.
+# So run load during a release, or this check proves nothing.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: gateway-success-rate
+  labels:
+    {{- include "parcelpigeon.labels" (dict "name" "gateway" "ctx" $) | nindent 4 }}
+spec:
+  args:
+    - name: canary-hash # passed by the Rollout step (podTemplateHashValue: Latest)
+  metrics:
+    - name: success-rate
+      initialDelay: 30s # let Prometheus scrape the new pods a couple of times
+      interval: 30s
+      count: 4
+      failureLimit: 0
+      successCondition: result[0] >= 0.95
+      provider:
+        prometheus:
+          address: {{ .Values.monitoring.prometheusAddress }}
+          query: |
+            (
+              (sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}", service="gateway", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}", route=~"/api/.*", status!~"5.."}[1m])) or vector(0))
+              /
+              sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}", service="gateway", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}", route=~"/api/.*"}[1m]))
+            ) or vector(1)
+{{- end }}
